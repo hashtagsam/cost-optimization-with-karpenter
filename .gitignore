@@ -1,0 +1,9 @@
+# Terraform: state can contain secrets; real values stay local
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+tfplan
+*.tfvars
+!*.tfvars.example
+backend.hcl
+# Keep .terraform.lock.hcl committed: it pins provider checksums

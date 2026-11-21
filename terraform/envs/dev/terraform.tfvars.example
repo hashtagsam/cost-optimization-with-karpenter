@@ -1,0 +1,14 @@
+# cp terraform.tfvars.example terraform.tfvars   (git-ignored)
+
+# curl -s https://checkip.amazonaws.com
+endpoint_public_access_cidrs = ["203.0.113.10/32"]
+
+# aws sts get-caller-identity --query Arn --output text
+# If that shows arn:aws:sts::...:assumed-role/<RoleName>/..., use:
+#   aws iam get-role --role-name <RoleName> --query Role.Arn --output text
+admin_principal_arns = ["arn:aws:iam::123456789012:role/Admin"]
+
+# false if: aws iam get-role --role-name AWSServiceRoleForEC2Spot  succeeds
+create_spot_service_linked_role = true
+
+budget_email = "you@example.com"
