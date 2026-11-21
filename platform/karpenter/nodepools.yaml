@@ -1,0 +1,93 @@
+# Rendered by `make nodepools` (envsubst fills ${CLUSTER_NAME} ${NODE_ROLE}).
+#
+# EC2NodeClass = HOW nodes are built. NodePool = WHAT may be bought and WHEN
+# it may be removed.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  role: ${NODE_ROLE}
+  amiSelectorTerms:
+    - alias: bottlerocket@latest # pin in prod; a change rolls nodes via drift
+  subnetSelectorTerms:
+    - tags: { karpenter.sh/discovery: "${CLUSTER_NAME}" }
+  securityGroupSelectorTerms:
+    - tags: { karpenter.sh/discovery: "${CLUSTER_NAME}" }
+  associatePublicIPAddress: false
+  metadataOptions: # IMDSv2, pods can't reach node credentials
+    httpEndpoint: enabled
+    httpTokens: required
+    httpPutResponseHopLimit: 1
+  blockDeviceMappings: # Bottlerocket: OS + data volume, gp3, encrypted
+    - deviceName: /dev/xvda
+      ebs: { volumeSize: 4Gi, volumeType: gp3, encrypted: true }
+    - deviceName: /dev/xvdb
+      ebs: { volumeSize: 30Gi, volumeType: gp3, encrypted: true }
+  tags: # copied to instances/volumes -> cost allocation
+    Project: karpenter-costopt
+    ManagedBy: karpenter
+
+
+
+---
+# general: Spot-first, multi-arch, wide instance menu (more Spot pools =
+# fewer interruptions). Falls back to on-demand if Spot is unavailable.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general
+spec:
+  weight: 50
+  template:
+    metadata:
+      labels: { workload-tier: general }
+    spec:
+      nodeClassRef: { group: karpenter.k8s.aws, kind: EC2NodeClass, name: default }
+      requirements:
+        - { key: karpenter.sh/capacity-type, operator: In, values: [spot, on-demand] }
+        - { key: kubernetes.io/arch, operator: In, values: [arm64, amd64] }
+        - { key: karpenter.k8s.aws/instance-category, operator: In, values: [c, m, r] }
+        - { key: karpenter.k8s.aws/instance-generation, operator: Gt, values: ["5"] }
+        - { key: karpenter.k8s.aws/instance-cpu, operator: Lt, values: ["33"] } # cap blast radius
+      expireAfter: 720h # recycle every node within 30 days -> patched AMIs
+  limits: { cpu: "64", memory: 256Gi } # hard cost ceiling
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 2m # demo value; 5-15m in prod
+    budgets:
+      - nodes: "20%"
+
+
+---
+# critical: on-demand only, tainted (opt-in), conservative disruption.
+# Kyverno only lets approved namespaces tolerate the taint.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: critical
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels: { workload-tier: critical }
+    spec:
+      nodeClassRef: { group: karpenter.k8s.aws, kind: EC2NodeClass, name: default }
+      taints:
+        - { key: workload-tier, value: critical, effect: NoSchedule }
+      requirements:
+        - { key: karpenter.sh/capacity-type, operator: In, values: [on-demand] }
+        - { key: kubernetes.io/arch, operator: In, values: [arm64, amd64] }
+        - { key: karpenter.k8s.aws/instance-category, operator: In, values: [c, m, r] }
+        - { key: karpenter.k8s.aws/instance-generation, operator: Gt, values: ["5"] }
+      expireAfter: 720h
+  limits: { cpu: "32", memory: 128Gi }
+  disruption:
+    consolidationPolicy: Balanced # only move pods when the saving justifies it
+    consolidateAfter: 15m
+    budgets:
+      - nodes: "1"
+      - nodes: "0" # business-hours freeze for cost/patch moves (UTC)
+        reasons: [Underutilized, Drifted]
+        schedule: "0 8 * * mon-fri"
+        duration: 10h

@@ -1,0 +1,16 @@
+# Karpenter Helm values. clusterName and interruptionQueue are passed by
+# `make karpenter` from Terraform outputs. Chart defaults kept: non-root,
+# read-only root FS, all capabilities dropped, PDB, zone spread.
+replicas: 2
+
+# Only on the static system nodes - never on nodes Karpenter manages
+nodeSelector:
+  karpenter.sh/controller: "true"
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+
+controller:
+  resources:
+    requests: { cpu: 500m, memory: 768Mi }
+    limits: { cpu: "1", memory: 1Gi }
