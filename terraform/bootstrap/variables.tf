@@ -28,3 +28,4 @@ variable "github_environment" {
   default     = "dev"
 }
 
+# CI test: plan-on-PR check
