@@ -1,0 +1,14 @@
+# All Kyverno controllers on the static system nodes. The webhook is
+# fail-closed; if consolidation evicted it, no pod could be admitted.
+admissionController:
+  nodeSelector: { node-role: system }
+  tolerations: [{ key: CriticalAddonsOnly, operator: Exists }]
+backgroundController:
+  nodeSelector: { node-role: system }
+  tolerations: [{ key: CriticalAddonsOnly, operator: Exists }]
+reportsController:
+  nodeSelector: { node-role: system }
+  tolerations: [{ key: CriticalAddonsOnly, operator: Exists }]
+cleanupController:
+  nodeSelector: { node-role: system }
+  tolerations: [{ key: CriticalAddonsOnly, operator: Exists }]
