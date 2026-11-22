@@ -1,0 +1,36 @@
+# Scrape Karpenter and alert on the ways a cost-optimised cluster goes wrong.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: karpenter
+  namespace: monitoring
+spec:
+  namespaceSelector: { matchNames: [kube-system] }
+  selector:
+    matchLabels: { app.kubernetes.io/name: karpenter }
+  endpoints:
+    - port: http-metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: karpenter-cost
+  namespace: monitoring
+spec:
+  groups:
+    - name: karpenter
+      rules:
+        - alert: NodePoolNearLimit # cost ceiling close -> pods will go Pending
+          expr: max by (nodepool, resource_type) (karpenter_nodepools_usage) / max by (nodepool, resource_type) (karpenter_nodepools_limit) > 0.8
+          for: 10m
+          labels: { severity: warning }
+        - alert: HighNodeChurn # consolidation thrashing eats the savings
+          expr: sum by (nodepool, reason) (increase(karpenter_nodeclaims_disrupted_total[1h])) > 20
+          for: 15m
+          labels: { severity: warning }
+        - alert: PodsPendingTooLong # what Karpenter exists to prevent
+          expr: sum by (namespace) (kube_pod_status_phase{phase="Pending"}) > 0
+          for: 10m
+          labels: { severity: warning }
+
+

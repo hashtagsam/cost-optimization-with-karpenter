@@ -1,0 +1,37 @@
+# kube-prometheus-stack, lab sizing. Grafana is not exposed (port-forward only).
+alertmanager:
+  enabled: false # lab: alerts visible in Prometheus/Grafana; prod: route to PagerDuty/Slack
+
+grafana:
+  admin: # random password created by `make monitoring`, never the chart default
+    existingSecret: grafana-admin
+    userKey: admin-user
+    # checkov:skip=CKV_SECRET_6:this is a key name, not a secret
+    passwordKey: admin-password
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - { name: karpenter, folder: Karpenter, type: file, options: { path: /var/lib/grafana/dashboards/karpenter } }
+  dashboards:
+    karpenter: # official dashboards, pinned to the Karpenter release
+      capacity:
+        url: https://raw.githubusercontent.com/aws/karpenter-provider-aws/v1.15.2/website/content/en/preview/getting-started/getting-started-with-karpenter/karpenter-capacity-dashboard.json
+        datasource: Prometheus
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    serviceMonitorSelectorNilUsesHelmValues: false # pick up our ServiceMonitors/rules
+    ruleSelectorNilUsesHelmValues: false
+    # Lab uses emptyDir storage, so stop consolidation moving Prometheus
+    # mid-demo (prod: persistent volume or Amazon Managed Prometheus)
+    podMetadata:
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+
+# EKS runs the control plane; these aren't scrapeable
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeEtcd: { enabled: false }
+kubeProxy: { enabled: false }

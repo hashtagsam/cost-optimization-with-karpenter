@@ -1,0 +1,90 @@
+# Guardrails that keep Karpenter's savings real. Kyverno CEL ValidatingPolicy
+# (ClusterPolicy is deprecated). autogen applies each rule to Deployments,
+# Jobs etc. too, so bad manifests fail at `kubectl apply`.
+
+# 1. Karpenter sizes nodes from pod REQUESTS - no requests, no bin-packing.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-resource-requests
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [""], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [pods] }
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kyverno, monitoring, opencost]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c, has(c.resources) && has(c.resources.requests) &&
+          'cpu' in c.resources.requests && 'memory' in c.resources.requests &&
+          has(c.resources.limits) && 'memory' in c.resources.limits)
+      message: Every container needs cpu+memory requests and a memory limit.
+
+
+---
+# 2. Mutable tags let untested images in on the next node replacement.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [""], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [pods] }
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kyverno, monitoring, opencost]
+  validations:
+    # Look after the last "/" so a registry port isn't mistaken for a tag
+    - expression: >-
+        object.spec.containers.all(c, c.image.contains('@sha256:') ||
+          (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: Use a pinned image tag or digest, not ':latest'.
+
+
+---
+# 3. On-demand capacity costs far more than Spot: only namespaces labelled
+#    platform.example.io/tier=critical may tolerate the critical taint.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-critical-nodepool
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [""], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [pods] }
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kyverno, monitoring, opencost]
+  variables:
+    - name: toleratesCritical # includes the "tolerate everything" bypass
+      expression: >-
+        object.spec.?tolerations.orValue([]).exists(t,
+          (t.?key.orValue('') == '' && t.?operator.orValue('') == 'Exists') ||
+          (t.?key.orValue('') == 'workload-tier' &&
+            (t.?operator.orValue('') == 'Exists' || t.?value.orValue('') == 'critical')))
+  validations:
+    - expression: >-
+        !variables.toleratesCritical ||
+        namespaceObject.?metadata.?labels.orValue({})[?'platform.example.io/tier'].orValue('') == 'critical'
+      message: This namespace is not approved for the on-demand critical NodePool.

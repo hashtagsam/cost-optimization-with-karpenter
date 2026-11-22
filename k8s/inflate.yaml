@@ -1,0 +1,35 @@
+# Karpenter demo: `make inflate` -> 30 x 1 vCPU pods -> nodes appear in ~1 min;
+# `make deflate` -> pods gone -> consolidation removes the nodes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inflate
+  namespace: demo
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=pause container serves nothing to probe
+    checkov.io/skip2: CKV_K8S_9=pause container serves nothing to probe
+spec:
+  replicas: 0
+  selector:
+    matchLabels: { app: inflate }
+  template:
+    metadata:
+      labels: { app: inflate, team: platform }
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 0
+      nodeSelector: { workload-tier: general }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65535
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: { cpu: "1", memory: 1Gi }
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }

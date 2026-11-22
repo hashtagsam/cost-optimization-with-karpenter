@@ -1,0 +1,12 @@
+# OpenCost: cost per namespace / team label, from Prometheus data.
+# Caveat: without the Spot data feed it prices Spot nodes at on-demand rates;
+# scripts/cost-report.sh uses live Spot prices for the node-level number.
+opencost:
+  prometheus:
+    internal:
+      serviceName: kube-prometheus-stack-prometheus
+      namespaceName: monitoring
+      port: 9090
+  metrics:
+    serviceMonitor:
+      enabled: true
