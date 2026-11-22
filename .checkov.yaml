@@ -1,0 +1,11 @@
+# Every skip is a documented, accepted risk - not noise switched off.
+framework: [terraform, github_actions, secrets, kubernetes]
+skip-check:
+  - CKV_AWS_394   # AZs: first 3 standard zones, deterministic slice
+  - CKV_TF_1      # registry modules pinned to exact versions + Dependabot (vs git SHAs)
+  - CKV_AWS_18    # state bucket access logging: prod hardening, out of lab scope
+  - CKV2_AWS_62   # state bucket event notifications: same
+  - CKV_AWS_144   # state bucket cross-region replication: same
+  - CKV_K8S_11    # no CPU limits by design (throttling); CPU requests are enforced
+  - CKV_K8S_15    # IfNotPresent + pinned tags; Always adds pulls and NAT cost
+  - CKV_K8S_43    # image digests + signing = next project (supply chain)

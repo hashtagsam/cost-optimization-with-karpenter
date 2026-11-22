@@ -1,0 +1,9 @@
+# Pins without updates just collect CVEs: weekly update PRs, checked by CI.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: terraform
+    directories: [/terraform/bootstrap, /terraform/envs/dev]
+    schedule: { interval: weekly }
