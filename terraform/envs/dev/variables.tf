@@ -14,7 +14,7 @@ variable "kubernetes_version" {
 }
 
 variable "endpoint_public_access_cidrs" {
-  description = "IPs allowed to reach the EKS API, e.g. [\"81.2.69.142/32\"]."
+  description = "IPs allowed to reach the EKS API, e.g. [\"12.34.56.78/32\"]."
   type        = list(string)
   validation {
     condition     = length(var.endpoint_public_access_cidrs) > 0 && !contains(var.endpoint_public_access_cidrs, "0.0.0.0/0")

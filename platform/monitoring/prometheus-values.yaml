@@ -3,6 +3,15 @@ alertmanager:
   enabled: false # lab: alerts visible in Prometheus/Grafana; prod: route to PagerDuty/Slack
 
 grafana:
+  livenessProbe:
+    httpGet: { path: /api/health, port: 3000 }
+    initialDelaySeconds: 300
+    timeoutSeconds: 30
+    failureThreshold: 10
+  # Guaranteed CPU so startup isn't starved (also lets Karpenter size the node right)
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
   admin: # random password created by `make monitoring`, never the chart default
     existingSecret: grafana-admin
     userKey: admin-user
