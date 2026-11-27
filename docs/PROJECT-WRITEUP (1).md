@@ -113,8 +113,6 @@ Screenshots are in `docs/images/`.
 
 **1. KMS key "pending deletion" when re-initialising Terraform**
 
-![KMS pending deletion](images/err-kms-pending-deletion.png)
-
 - *Symptom:* `terraform init` failed with `KMSInvalidStateException … is pending deletion`.
 - *Cause:* after a rebuild, my old `backend.hcl` still pointed at the previous state key, which was scheduled for deletion.
 - *Fix:* `make init` now **always regenerates** `backend.hcl` from the current bootstrap outputs and runs `init -reconfigure`. I also set the key's deletion window to the 7-day minimum.
@@ -126,8 +124,6 @@ Screenshots are in `docs/images/`.
 - *Fix:* every Terraform call in the Makefile uses `terraform -chdir=…` from the repo root, which removes the "which folder am I in?" problem.
 
 **3. Karpenter IAM policy too large**
-
-![PolicySize error](images/err-policysize.png)
 
 - *Symptom:* `LimitExceeded: Cannot exceed quota for PolicySize: 6144`.
 - *Cause:* Karpenter's controller policy is longer than IAM's limit for managed policies.
@@ -141,62 +137,39 @@ Screenshots are in `docs/images/`.
 
 **5. `EntityAlreadyExists` for the GitHub OIDC provider on re-bootstrap**
 
-![OIDC already exists](images/err-oidc-exists.png)
-
 - *Cause:* I had lost bootstrap's local state file when cleaning up the first version of the repo, but the OIDC provider (one per URL per account) still existed in AWS.
 - *Fix:* **imported** the existing provider (and roles) into the new state with `terraform import` rather than deleting them, since other repos' pipelines could depend on a shared provider. Bootstrap's state file is now backed up outside the repo.
 
 ### Policies and manifests
 
-**6. Kyverno loaded only one of three policies**
-
-- *Symptom:* `kyverno apply` reported `Applying 1 policy rule(s)` (earlier, `0`).
-- *Causes:* `0` was the wrong working directory. `1` was because I had used a YAML anchor to share the namespace selector, and **anchors don't work across `---` documents**, so policies 2 and 3 were malformed.
-- *Fix:* repeated the selector in each policy. Verified with deliberately bad test manifests that each policy rejects what it should.
-
-**7. CEL error on pods with no `resources` block**
+**6. CEL error on pods with no `resources` block**
 
 - *Cause:* the expression read `c.resources.requests` without first checking `resources` existed, and CEL errors on missing fields.
 - *Fix:* guard with `has(c.resources) && has(c.resources.requests) && …`.
 
-**8. `missing 'kind' key`**
+**7. `missing 'kind' key`**
 
 - *Cause:* the Kyverno Helm values file sat in the same folder as the policies, so `kubectl apply -f` tried to apply it as a Kubernetes object.
 - *Fix:* each component has a values file and a manifests file, applied separately.
 
-### CI
 
-**9. CI failures on my first push (shellcheck SC2148, missing tools)**
-
-![CI failure](images/err-ci-first-run.png)
-
-- *Causes:* a script without a shebang line, and checks I had only run locally with tools that weren't installed (tflint, checkov, kubeconform, yq).
-- *Fix:* added shebangs and `set -euo pipefail`, and added `make lint` so the same checks run locally before pushing.
-
-**10. "Source Account ID is needed if the Role Name is provided and not the Role ARN"**
-
-![Role ARN annotation](images/err-role-arn.png)
-
-- *Cause:* the `AWS_PLAN_ROLE_ARN` repo variable didn't start with `arn:`; it had picked up quote marks from copying `terraform output` by hand.
-- *Fix:* set every variable directly from `terraform output -raw` with `gh variable set`, so nothing is copied by hand.
-
-**11. Keeping tfvars private in a public repo**
+**8. Keeping tfvars private in a public repo**
 
 - *Issue:* not an error, but my repo is public and the tfvars contain my IP and email. Plan output in job summaries is public too.
 - *Fix:* moved `TF_VARS` from a variable to a **secret**, and marked the IP and email variables `sensitive` so Terraform redacts them in plans. The budget's `count` needed `nonsensitive(var.budget_email != "")`, because Terraform won't use a sensitive value in `count`.
 
 ### Platform
 
-**12. `make monitoring`: `context deadline exceeded`**
+**9. `make monitoring`: `context deadline exceeded`**
 
-![Grafana liveness failures](images/err-grafana-liveness.png)
+![Grafana liveness failures](grafana-liveness.png)
 
 - *Symptom:* Helm timed out after 10 minutes; `kubectl describe` showed Grafana being restarted by its liveness probe, `connection refused` on port 3000.
 - *Diagnosis:* the logs showed no error, just slow progress: about 2½ minutes of startup, killed at the final step. Long gaps between log lines pointed to CPU starvation, because the chart sets no CPU request and the `monitoring` namespace is excluded from my own requests policy.
 - *Fix:* added a CPU/memory request and a longer liveness `initialDelaySeconds`. Grafana now gets guaranteed CPU and Karpenter sizes the node for it.
 - *Lesson:* the same rule I enforce on apps, that requests drive scheduling, applies to platform components too.
 
-**13. Teardown: `the server doesn't have a resource type "nodepools"`**
+**10. Teardown: `the server doesn't have a resource type "nodepools"`**
 
 - *Cause:* tearing down a half-built cluster where Karpenter wasn't installed.
 - *Fix:* `teardown.sh` checks for the NodePool CRD before deleting NodePools, then always continues to `terraform destroy` and an orphaned-instance check.
