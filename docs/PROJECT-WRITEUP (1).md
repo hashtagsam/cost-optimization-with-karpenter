@@ -22,7 +22,7 @@ Measured with `make report` during the burst demo (`make inflate`: 30 pods × 1 
 | Same 6 nodes, all on-demand | $2.28/hour → **Spot saves 71%** |
 | Static baseline, 6 × m6i.xlarge on-demand | $1.33/hour (~$972/month) → **Karpenter saves 51%** |
 
-![make report output](images/make-report.png)
+![Make report output](make-report.png)
 
 What the numbers show:
 
@@ -31,16 +31,25 @@ What the numbers show:
 - **The two system nodes are now the biggest fixed cost** ($0.19/hour of the $0.66). They are on-demand by design, so a Savings Plan is the next lever (see improvements).
 - **Caveats:** EC2 compute only, list prices, at one moment. EBS, NAT, the EKS control plane and data transfer are excluded, and Spot prices move hourly. After `make deflate`, consolidation removes the Spot nodes, so the cost falls with demand; the static baseline does not.
 
-![Nodes scaling during inflate](make-inflate.png)
-![Karpenter capacity dashboard](grafana-karpenter.png)
-![Cost report](make-report.png)
-![Guradrails](guardrail-in-action.png)
-![Karpenter capacity dashboard](make-deflate.png)
+-- Nodes scaling: ![Nodes scaling during inflate](make-inflate.png)
+-- Grafana dashboard: ![Karpenter capacity dashboard](grafana-karpenter.png)
+-- Guardrails test: ![Guradrails](guardrail-in-action.png)
+-- Deflating the workload: ![Karpenter capacity dashboard](make-deflate.png)
 
 ## What I built
 
-![Architecture](images/architecture.png)
-<!-- Optional: export a diagram, or keep the text diagram from the README -->
+GitHub Actions ──OIDC──► plan role (read-only) / apply role (approval-gated)
+        │
+        ▼
+Terraform ─► VPC (3 AZ, private nodes, 1 NAT, flow logs, S3 endpoint)
+          └► EKS 1.35 (KMS-encrypted secrets, audit logs, access entries)
+                ├─ system node group: 2 × Bottlerocket ARM (m7g.large), tainted, on-demand
+                │     runs Karpenter, CoreDNS, Kyverno, metrics-server
+                └─ Karpenter NodePools
+                      general : Spot-first, ARM+x86, c/m/r gen 6+, consolidates
+                      critical: on-demand, tainted, no cost moves in business hours
+Kyverno  ─► admission guardrails (requests/limits, no :latest, critical-pool access)
+Prometheus + Grafana + OpenCost ─► node churn, pool limits, pending pods, cost per namespace
 
 ### 1. Foundations: state and CI identity (`terraform/bootstrap`)
 
