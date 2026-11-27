@@ -162,7 +162,7 @@ Screenshots are in `docs/images/`.
 
 **9. `make monitoring`: `context deadline exceeded`**
 
-![Grafana liveness failures](grafana-liveness.png)
+![Grafana liveness failures](grafana-liveness-failure.png)
 
 - *Symptom:* Helm timed out after 10 minutes; `kubectl describe` showed Grafana being restarted by its liveness probe, `connection refused` on port 3000.
 - *Diagnosis:* the logs showed no error, just slow progress: about 2½ minutes of startup, killed at the final step. Long gaps between log lines pointed to CPU starvation, because the chart sets no CPU request and the `monitoring` namespace is excluded from my own requests policy.
