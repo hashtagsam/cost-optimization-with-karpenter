@@ -37,7 +37,7 @@ What the numbers show:
 -- Deflating the workload: ![Karpenter capacity dashboard](make-deflate.png)
 
 ## What I built
-
+```
 GitHub Actions ──OIDC──► plan role (read-only) / apply role (approval-gated)
         │
         ▼
@@ -50,6 +50,7 @@ Terraform ─► VPC (3 AZ, private nodes, 1 NAT, flow logs, S3 endpoint)
                       critical: on-demand, tainted, no cost moves in business hours
 Kyverno  ─► admission guardrails (requests/limits, no :latest, critical-pool access)
 Prometheus + Grafana + OpenCost ─► node churn, pool limits, pending pods, cost per namespace
+```
 
 ### 1. Foundations: state and CI identity (`terraform/bootstrap`)
 
